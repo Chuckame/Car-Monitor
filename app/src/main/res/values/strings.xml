@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">Lazy Connection Client</string>
+    <string name="title_activity_one_message_view">OneMessageView</string>
+    <string name="title_home">Home</string>
+    <string name="title_dashboard">Dashboard</string>
+    <string name="title_notifications">Notifications</string>
 </resources>

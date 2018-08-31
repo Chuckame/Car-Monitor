@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.michoko.lazyconnectionclient">
-    <uses-feature android:name="android.hardware.usb.host"
-        android:required="true"/>
+
+    <uses-feature
+        android:name="android.hardware.usb.host"
+        android:required="true" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -17,10 +20,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
         <service
-            android:name="org.michoko.lazyconnectionclient.UsbService"
-            android:enabled="true">
-        </service>
+            android:name=".UsbService"
+            android:enabled="true" />
+
+        <activity
+            android:name=".OneMessageTypeView"
+            android:label="@string/title_activity_one_message_view"></activity>
     </application>
 
 </manifest>

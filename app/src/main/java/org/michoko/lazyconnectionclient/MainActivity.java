@@ -1,122 +1,94 @@
 package org.michoko.lazyconnectionclient;
 
-import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
-import android.widget.Button;
+import android.util.Log;
+import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.ListView;
-import android.widget.Spinner;
-import android.widget.TabHost;
-import android.widget.Toast;
 
 import java.lang.ref.WeakReference;
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 import androidx.appcompat.app.AppCompatActivity;
+import lombok.EqualsAndHashCode;
 
 public class MainActivity extends AppCompatActivity {
 
-    private Button connectBtn;
-    private ListView messagesList;
-    private Spinner serialPortsSpinner;
-
+    ListView messageTypesView;
+    ArrayAdapter<String> adapter;
+    LinkedHashSet<Integer> messageTypes = new LinkedHashSet<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        connectBtn = findViewById(R.id.connectBtn);
-        messagesList = findViewById(R.id.messagesList);
-        serialPortsSpinner = findViewById(R.id.serialPortsSpinner);
+        // Get ListView object from xml
+        messageTypesView = findViewById(R.id.messageTypes);
 
-        initTabs();
-    }
+        adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, android.R.id.text1);
 
+        // Assign adapter to ListView
+        messageTypesView.setAdapter(adapter);
 
-    protected void initTabs() {
-        TabHost host = (TabHost) findViewById(R.id.tabHost);
-        host.setup();
+        // ListView Item Click Listener
+        messageTypesView.setOnItemClickListener((AdapterView<?> parent, View view, int position, long id) -> onItemClick((String) messageTypesView.getItemAtPosition(position)));
 
-        //Tab 1
-        TabHost.TabSpec spec = host.newTabSpec("Messages");
-        spec.setContent(R.id.tabMessages);
-        spec.setIndicator("Messages");
-        host.addTab(spec);
+       /*new Thread(() -> {
+            while (!isDestroyed()) {
+                StringBuilder b = new StringBuilder();
+                Random random = new Random();
+                int len = random.nextInt(9);
+                b.append(Integer.toHexString(random.nextInt(9) + 0xAA).toUpperCase());
+                b.append(',');
+                b.append(len);
+                b.append(',');
+                for (int i = 0; i < len; i++) {
+                    b.append(Integer.toHexString(random.nextInt(0xFF)).toUpperCase());
+                    if (i < len - 1) {
+                        b.append(' ');
+                    }
+                }
+                runOnUiThread(() ->
+                        onNewMessage(CanbusMessageHelper.parseMessage(b.toString())));
 
-        //Tab 2
-        spec = host.newTabSpec("Settings");
-        spec.setContent(R.id.tabSettings);
-        spec.setIndicator("Settings");
-        host.addTab(spec);
-    }/*
-     * Notifications from UsbService will be received here.
-     */
-
-    private final BroadcastReceiver mUsbReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            switch (intent.getAction()) {
-                case UsbService.ACTION_USB_PERMISSION_GRANTED: // USB PERMISSION GRANTED
-                    Toast.makeText(context, "USB Ready", Toast.LENGTH_SHORT).show();
-                    break;
-                case UsbService.ACTION_USB_PERMISSION_NOT_GRANTED: // USB PERMISSION NOT GRANTED
-                    Toast.makeText(context, "USB Permission not granted", Toast.LENGTH_SHORT).show();
-                    break;
-                case UsbService.ACTION_NO_USB: // NO USB CONNECTED
-                    Toast.makeText(context, "No USB connected", Toast.LENGTH_SHORT).show();
-                    break;
-                case UsbService.ACTION_USB_DISCONNECTED: // USB DISCONNECTED
-                    Toast.makeText(context, "USB disconnected", Toast.LENGTH_SHORT).show();
-                    break;
-                case UsbService.ACTION_USB_NOT_SUPPORTED: // USB NOT SUPPORTED
-                    Toast.makeText(context, "USB device not supported", Toast.LENGTH_SHORT).show();
-                    break;
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    return;
+                }
             }
-        }
-    };
-    private UsbService usbService;
-    private final ServiceConnection usbConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName arg0, IBinder arg1) {
-            usbService = ((UsbService.UsbBinder) arg1).getService();
-            usbService.setHandler(new MyHandler(MainActivity.this));
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName arg0) {
-            usbService = null;
-        }
-    };
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        setFilters();  // Start listening notifications from UsbService
-        startService(UsbService.class, usbConnection, null); // Start UsbService(if it was not started before) and Bind it
+        }).start();*/
     }
 
-    @Override
-    public void onPause() {
-        super.onPause();
-        unregisterReceiver(mUsbReceiver);
-        unbindService(usbConnection);
+    private void onItemClick(String item) {
+        Intent intent = new Intent(MainActivity.this, OneMessageTypeView.class);
+        Bundle b = new Bundle();
+        b.putInt("msgId", Integer.parseInt(item, 16));
+        intent.putExtras(b);
+        startActivity(intent);
     }
 
-    private void onSerialDataReceived(String data) {
-        Toast.makeText(this, "Data received: " + data, Toast.LENGTH_SHORT).show();
+    private void onNewMessage(CanbusMessage msg) {
+        if (msg == null) {
+            return;
+        }
+        Log.i("MainActivity", "New msg: " + msg);
+        if (messageTypes.add(msg.getId())) {
+            adapter.insert(Integer.toHexString(msg.getId()).toUpperCase(), 0);
+        }
     }
 
-    /*
-     * This handler will be passed to UsbService. Data received from serial port is displayed through this handler
-     */
+    @EqualsAndHashCode(of = "mActivity")
     private static class MyHandler extends Handler {
         private final WeakReference<MainActivity> mActivity;
 
@@ -128,10 +100,38 @@ public class MainActivity extends AppCompatActivity {
         public void handleMessage(Message msg) {
             switch (msg.what) {
                 case UsbService.MESSAGE_FROM_SERIAL_PORT:
-                    mActivity.get().onSerialDataReceived((String) msg.obj);
+                    mActivity.get().onNewMessage((CanbusMessage) msg.obj);
                     break;
             }
         }
+    }
+
+    private UsbService usbService;
+    private MyHandler handler = new MyHandler(MainActivity.this);
+    private final ServiceConnection usbConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName componentName, IBinder binder) {
+            usbService = ((UsbService.UsbBinder) binder).getService();
+            usbService.addHandler(handler);
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName arg0) {
+            usbService.removeHandler(handler);
+            usbService = null;
+        }
+    };
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        startService(UsbService.class, usbConnection, null); // Start UsbService(if it was not started before) and Bind it
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        unbindService(usbConnection);
     }
 
     private void startService(Class<?> service, ServiceConnection serviceConnection, Bundle extras) {
@@ -148,15 +148,5 @@ public class MainActivity extends AppCompatActivity {
         }
         Intent bindingIntent = new Intent(this, service);
         bindService(bindingIntent, serviceConnection, Context.BIND_AUTO_CREATE);
-    }
-
-    private void setFilters() {
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(UsbService.ACTION_USB_PERMISSION_GRANTED);
-        filter.addAction(UsbService.ACTION_NO_USB);
-        filter.addAction(UsbService.ACTION_USB_DISCONNECTED);
-        filter.addAction(UsbService.ACTION_USB_NOT_SUPPORTED);
-        filter.addAction(UsbService.ACTION_USB_PERMISSION_NOT_GRANTED);
-        registerReceiver(mUsbReceiver, filter);
     }
 }

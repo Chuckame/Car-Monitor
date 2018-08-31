@@ -19,7 +19,9 @@ import com.felhr.usbserial.UsbSerialInterface;
 import com.google.common.base.Charsets;
 
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 public class UsbService extends Service {
 
@@ -43,7 +45,7 @@ public class UsbService extends Service {
     private IBinder binder = new UsbBinder();
 
     private Context context;
-    private Handler mHandler;
+    private Set<Handler> handlers = new LinkedHashSet<>();
     private UsbManager usbManager;
     private UsbDevice device;
     private UsbDeviceConnection connection;
@@ -58,11 +60,16 @@ public class UsbService extends Service {
     private UsbSerialInterface.UsbReadCallback mCallback = new UsbSerialInterface.UsbReadCallback() {
         @Override
         public void onReceivedData(byte[] buf) {
-            if (mHandler != null) {
+            if (!handlers.isEmpty() && buf.length > 0) {
                 String data = new String(buf, Charsets.UTF_8);
                 for (String msg : data.split("\r\n")) {
                     if (!msg.isEmpty()) {
-                        mHandler.obtainMessage(MESSAGE_FROM_SERIAL_PORT, msg).sendToTarget();
+                        CanbusMessage parsedMsg = CanbusMessageHelper.parseMessage(msg);
+                        if (parsedMsg != null) {
+                            for (Handler h : handlers) {
+                                h.obtainMessage(MESSAGE_FROM_SERIAL_PORT, parsedMsg).sendToTarget();
+                            }
+                        }
                     }
                 }
             }
@@ -75,8 +82,10 @@ public class UsbService extends Service {
     private UsbSerialInterface.UsbCTSCallback ctsCallback = new UsbSerialInterface.UsbCTSCallback() {
         @Override
         public void onCTSChanged(boolean state) {
-            if (mHandler != null) {
-                mHandler.obtainMessage(CTS_CHANGE).sendToTarget();
+            if (!handlers.isEmpty()) {
+                for (Handler mHandler : handlers) {
+                    mHandler.obtainMessage(CTS_CHANGE).sendToTarget();
+                }
             }
         }
     };
@@ -87,8 +96,10 @@ public class UsbService extends Service {
     private UsbSerialInterface.UsbDSRCallback dsrCallback = new UsbSerialInterface.UsbDSRCallback() {
         @Override
         public void onDSRChanged(boolean state) {
-            if (mHandler != null) {
-                mHandler.obtainMessage(DSR_CHANGE).sendToTarget();
+            if (!handlers.isEmpty()) {
+                for (Handler mHandler : handlers) {
+                    mHandler.obtainMessage(DSR_CHANGE).sendToTarget();
+                }
             }
         }
     };
@@ -171,8 +182,12 @@ public class UsbService extends Service {
         }
     }
 
-    public void setHandler(Handler mHandler) {
-        this.mHandler = mHandler;
+    public void addHandler(Handler mHandler) {
+        this.handlers.add(mHandler);
+    }
+
+    public void removeHandler(Handler mHandler) {
+        this.handlers.remove(mHandler);
     }
 
     private void findSerialPortDevice() {
